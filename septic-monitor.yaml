@@ -1,0 +1,58 @@
+esphome:
+  name: septic-monitor
+  # Уникальное имя устройства
+
+esp8266:
+  board: d1_mini
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  manual_ip:
+    static_ip: 192.168.1.175
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+  fast_connect: true
+  output_power: 17.0
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+api:
+  password: !secret api_password
+
+logger:
+  level: DEBUG
+
+# Подключаем I²C шину для BH1750
+i2c:
+  sda: GPIO4
+  scl: GPIO5
+  scan: true  # Проверить, есть ли устройства на шине
+
+# Подключаем датчик освещённости BH1750
+sensor:
+  - platform: bh1750
+    name: "Уровень освещённости в септике"
+    id: septic_light_level
+    address: 0x23  # Убедись, что ADD подключен к GND
+    update_interval: 10s  # Обновлять каждые 10 секунд
+    unit_of_measurement: "lx"  # Люксы
+    accuracy_decimals: 1
+    filters:
+      # Усреднение для стабильности
+      - median:
+          window_size: 3
+          send_every: 1
+
+# Бинарный сенсор: аварийная лампочка включена
+binary_sensor:
+  - platform: template
+    name: "Авария септика"
+    id: septic_alarm_active
+    device_class: problem  # Иконка "внимание" в Home Assistant
+    lambda: |-
+      // Порог: если уровень освещённости выше 50 люксов — значит, лампочка включена
+      const float threshold = 50.0; // Настрой под свой септик
+      return id(septic_light_level).state > threshold;

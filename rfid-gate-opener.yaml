@@ -1,0 +1,122 @@
+esphome:
+  name: rfid-gate-opener
+  # Уникальное имя устройства
+
+esp32:  # или esp8266
+  board: esp32dev  # Укажи свою модель
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  manual_ip:
+    static_ip: 192.168.1.173  # Укажи свободный IP
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+  fast_connect: true
+  output_power: 17.0
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+api:
+  password: !secret api_password
+
+logger:
+  level: DEBUG
+
+# Включаем MQTT
+mqtt:
+  broker: !secret mqtt_broker
+  username: !secret mqtt_user
+  password: !secret mqtt_pass
+  id: mqtt_client  
+  
+# --- ✅ СПИСОК РАЗРЕШЁННЫХ UID ОПРЕДЕЛЁН В ОДНОМ МЕСТЕ ---
+globals:
+  - id: authorized_uids
+    type: std::vector<std::string>
+    # Замените на свои реальные UID
+    initial_value: 'std::vector<std::string>{"96-8F-D6-00", "83-3B-B1-14"}'
+
+# Подключаем SPI для RC522
+spi:
+  clk_pin: GPIO18  # Укажи правильный пин для своей платы
+  mosi_pin: GPIO23
+  miso_pin: GPIO19
+
+# Подключаем RC522
+rc522_spi:
+  cs_pin: GPIO21  # Укажи пин CS (SDA)
+  reset_pin: GPIO5  # Укажи пин RST
+  # Проверяем, появилась ли новая карта
+  on_tag:
+    then:
+      - lambda: |-
+          ESP_LOGD("rfid", "Обнаружен UID: %s", x.c_str());
+          // Обновляем текстовый сенсор
+          id(last_seen_uid).publish_state(x);
+
+      # Проверяем, известен ли UID
+      - if:
+          condition:
+            lambda: |-
+              // Получаем список разрешённых UID из globals
+              std::vector<std::string> uids = id(authorized_uids);
+              // Проверяем, есть ли x в списке
+              for (const std::string& uid : uids) {
+                if (x == uid) {
+                  // Формируем топик: esphome/rfid/<UID>/status
+                  std::string topic = "esphome/rfid/" + uid + "/status";
+                  std::string payload = "home";
+                  
+                  // Публикуем 'home' в топик
+                  id(mqtt_client).publish(topic, payload, 0, true);
+                  
+                  // Логируем
+                  ESP_LOGD("mqtt_publish", "Published 'home' to topic: %s", topic.c_str());
+                  
+                  return true;
+                }
+              }
+              return false;
+          then:
+            - logger.log: "✅ UID разрешён — открываю калитку"
+            - switch.turn_on: gate_relay
+            - delay: 3s  # держим 3 секунды
+            - switch.turn_off: gate_relay
+          else:
+            - logger.log: "❌ UID неизвестен — игнорирую"
+
+# Переключатель для реле (открывает калитку)
+switch:
+  - platform: gpio
+    pin: GPIO22  # Укажи пин, к которому подключено реле
+    name: "Open Gate"
+    id: gate_relay
+    restore_mode: ALWAYS_OFF  # Не включать при перезагрузке
+
+# Текстовый сенсор: последний UID
+text_sensor:
+  - platform: template
+    name: "Last UID on Gate"
+    id: last_seen_uid
+    update_interval: never  # Обновляется вручную через on_tag
+
+# Сенсор: разрешён ли UID
+binary_sensor:
+  - platform: template
+    name: "Authorized UID"
+    id: authorized_uid
+    lambda: |-
+      // Получаем текущий UID
+      std::string current_uid = id(last_seen_uid).state;
+      // Получаем список разрешённых UID из globals
+      std::vector<std::string> uids = id(authorized_uids);
+      // Проверяем, есть ли он в списке
+      for (const std::string& uid : uids) {
+        if (current_uid == uid) {
+          return true;
+        }
+      }
+      return false;

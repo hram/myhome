@@ -1,0 +1,35 @@
+esphome:
+  name: rf-receiver-433
+  # Уникальное имя устройства
+
+esp8266:
+  board: d1_mini  # или esp32, если у тебя ESP32
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  manual_ip:
+    static_ip: 192.168.1.177
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+  fast_connect: true
+  output_power: 17.0
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+api:
+  password: !secret api_password
+
+logger:
+  level: DEBUG
+  
+# === Приёмник 433 МГц ===
+remote_receiver:
+  pin: GPIO5  # D2 на D1 Mini — убедитесь, что DATA подключён сюда
+  dump: raw  
+  tolerance: 65%   # баланс: устойчивость к шуму и точность
+  filter: 100us    # фильтр коротких помех
+  idle: 15ms       # важно! даёт время на приём полной пачки
+  buffer_size: 2kb # большой буфер — меньше потерь при пачке
