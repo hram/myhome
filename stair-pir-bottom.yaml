@@ -1,0 +1,64 @@
+esphome:
+  name: stair-pir-bottom
+  friendly_name: "Датчик движения (низ лестницы)"
+
+esp8266:
+  board: d1_mini
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  manual_ip:
+    static_ip: 192.168.1.178
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+  fast_connect: true
+  output_power: 17.0
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+api:
+  password: !secret api_password
+
+logger:
+  level: DEBUG
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: D2
+      mode: INPUT
+    name: "Датчик движения (низ лестницы)"
+    id: pir_bottom
+    device_class: motion
+    filters:
+      - delayed_on: 100ms    # устранение дребезга
+      - delayed_off: 3s      # минимальное время "движение"
+
+    on_press:
+      - homeassistant.event:
+          event: esphome.stair_motion
+          data:
+            direction: up
+
+# Включаем светодиод на GPIO2, когда автомобиль обнаружен
+interval:
+  - interval: 1s  # Проверяем каждую секунду
+    then:
+      - if:
+          condition:
+            binary_sensor.is_on: pir_bottom  # Если обнаружено движение
+          then:
+            - output.turn_on: led_gpio2_out
+          else:
+            - output.turn_off: led_gpio2_out
+
+# Управляем GPIO2 напрямую как output
+output:
+  - platform: gpio
+    pin:
+      number: D4  # GPIO2 на D1 Mini (встроенный светодиод)
+      inverted: true  # Если светодиод включается при LOW (для встроенного D4 обычно НЕТ)
+    id: led_gpio2_out

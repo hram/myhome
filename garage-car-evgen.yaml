@@ -1,6 +1,5 @@
 esphome:
   name: garage-car-evgen
-  # Уникальное имя устройства
 
 esp8266:
   board: d1_mini  # Замени на свою модель, если не D1 Mini
@@ -25,45 +24,39 @@ api:
 logger:
   level: DEBUG
 
-# Подключение HC-SR04
-# VCC -> 5V
-# GND -> GND
-# Trig -> D6 (GPIO12)
-# Echo -> D7 (GPIO13)
+# Включаем I²C шину для VL53L0X
+i2c:
+  sda: GPIO4
+  scl: GPIO5
+  scan: true
 
-# Правильный синтаксис для датчика HC-SR04
+# Датчик расстояния VL53L0X
 sensor:
-  # Сенсор расстояния
-  - platform: ultrasonic
-    trigger_pin: D6  # GPIO12 на D1 Mini
-    echo_pin: D7     # GPIO13 на D1 Mini
+  - platform: vl53l0x
     name: "Расстояние до автомобиля"
-    id: car_distance_raw  # ID для использования в других компонентах
-    unit_of_measurement: "m"
+    id: car_distance_raw
+    # Режим: long_range (до 2 м), стандартный — 1.2 м
+    # long_range: true  # ← Включи, если расстояние до потолка > 1.2 м
+    update_interval: 5s  # Измеряем каждые 5 секунд
+    unit_of_measurement: "м"
     accuracy_decimals: 2
-    update_interval: 5s  # Частота измерения
-    filters:
-      - median: # Усреднение для стабильности
-          window_size: 3
-          send_every: 1
 
+# Бинарный сенсор: автомобиль на месте?
 binary_sensor:
-  # Бинарный сенсор: присутствие автомобиля
   - platform: template
     name: "Автомобиль в гараже"
     id: car_present
     device_class: occupancy
     filters:
-      # Задержка, чтобы избежать "дребезга"
-      - delayed_on: 2s       # Автомобиль считается припаркованным, если в зоне > 2 сек
-      - delayed_off: 5s      # Автомобиль считается уехавшим, если вне зоны > 5 сек
+      - delayed_on: 2s       # Подтверждение: машина стоит > 2 сек
+      - delayed_off: 5s      # Уехать — подождать 5 сек
     lambda: |-
-      // Условие: если расстояние до объекта меньше порога — значит, автомобиль на месте
-      const float threshold = 0.9; // Порог в метрах. Настрой под свою парковку!
+      // Порог: если расстояние < 0.9 м — машина есть
+      const float threshold = 0.9; // ← Настрой под свою высоту!
       if (isnan(id(car_distance_raw).state)) {
-        return false; // Если датчик не отвечает — считаем, что нет автомобиля
+        return false;
       }
-      return id(car_distance_raw).state < threshold;
+      return id(car_distance_raw).state < threshold;      
 
 # Включаем светодиод на GPIO2, когда автомобиль обнаружен
 interval:
