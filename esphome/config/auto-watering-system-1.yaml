@@ -1,28 +1,28 @@
+substitutions:
+  device_name: auto-watering-system-1
+  static_ip: 192.168.1.176
+  fw_version: "1.0.0"
+
 esphome:
-  name: auto-watering-system-1
+  name: ${device_name}
+  friendly_name: "Автополив фикуса"
+
+packages:
+  wifi: !include common/wifi_base.yaml
+  api: !include common/api.yaml
+  ota: !include common/ota.yaml
+  logger: !include common/logger.yaml
+  diagnostics: !include common/diagnostics.yaml
 
 esp8266:
   board: d1_mini
 
-wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
-  manual_ip:
-    static_ip: 192.168.1.176
-    gateway: 192.168.1.1
-    subnet: 255.255.255.0
-  fast_connect: true
-  output_power: 17.0
-
-ota:
-  - platform: esphome
-    password: !secret ota_password
-
-api:
-  password: !secret api_password
-
-logger:
-  level: DEBUG
+text_sensor:
+  - platform: template
+    name: "Версия"
+    entity_category: diagnostic
+    lambda: |-
+      return {"${fw_version}"};
 
 # Датчик влажности (емкостной)
 sensor:
@@ -46,11 +46,8 @@ sensor:
     update_interval: 60s
     lambda: |-
       float raw = id(soil_moisture_raw).state;
-      // Пример калибровки (заменить на свои значения!)
-      // 0% = 3.3 В (сухая почва)
-      // 100% = 1.6 В (влажная почва)
-      float dry_voltage = 2.57;  // ← Заменить на своё значение (сухая почва)
-      float wet_voltage = 0.93;  // ← Заменить на своё значение (влажная почва)
+      float dry_voltage = 2.57;  // сухая почва
+      float wet_voltage = 0.93;  // влажная почва
 
       if (raw >= dry_voltage) return 0.0;
       if (raw <= wet_voltage) return 100.0;
@@ -66,6 +63,7 @@ switch:
     pin: GPIO5  # ← Пин, к которому подключён MOSFET (gate)
     name: "Полить цветок"
     id: water_flower_switch
+    internal: true
     restore_mode: ALWAYS_OFF  # Не включать при перезагрузке
 
 # Скрипт: включить насос на 5 секунд

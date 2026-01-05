@@ -1,0 +1,80 @@
+substitutions:
+  device_name: stair-pir-top
+  static_ip: 192.168.1.179
+  fw_version: "1.0.4"
+
+esphome:
+  name: ${device_name}
+  friendly_name: "Датчик движения (верх лестницы)"
+
+packages:
+  wifi: !include common/wifi_base.yaml
+  api: !include common/api.yaml
+  ota: !include common/ota.yaml
+  logger: !include common/logger.yaml
+  diagnostics: !include common/diagnostics.yaml
+
+esp8266:
+  board: d1_mini
+
+text_sensor:
+  - platform: template
+    name: "Версия"
+    entity_category: diagnostic
+    lambda: |-
+      return {"${fw_version}"};
+
+binary_sensor:
+  - platform: template
+    id: pir_lock
+    internal: true
+
+  - platform: gpio
+    pin:
+      number: D2
+      mode: INPUT
+    name: "Датчик движения (верх лестницы)"
+    id: pir_top
+    device_class: motion
+    filters:
+      - delayed_on: 500ms    # устранение дребезга
+      - delayed_off: 5s      # минимальное время "движение"
+
+    on_press:
+      - if:
+          condition:
+            binary_sensor.is_off: pir_lock
+          then:
+            - binary_sensor.template.publish:
+                id: pir_lock
+                state: ON
+
+            - homeassistant.event:
+                event: esphome.stair_motion
+                data:
+                  direction: up
+
+            - delay: 30s
+            - binary_sensor.template.publish:
+                id: pir_lock
+                state: OFF
+
+# Включаем светодиод на GPIO2
+interval:
+  - interval: 1s  # Проверяем каждую секунду
+    then:
+      - if:
+          condition:
+            binary_sensor.is_on: pir_top  # Если обнаружено движение
+          then:
+            - output.turn_on: led_gpio2_out
+          else:
+            - output.turn_off: led_gpio2_out
+
+# Управляем GPIO2 напрямую как output
+output:
+  - platform: gpio
+    pin:
+      number: D4  # GPIO2 на D1 Mini (встроенный светодиод)
+      inverted: true  # Если светодиод включается при LOW (для встроенного D4 обычно НЕТ)
+    id: led_gpio2_out
