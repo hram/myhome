@@ -9,7 +9,9 @@ sensor:
   # Уровень сигнала Wi-Fi
   - platform: wifi_signal
     name: "${device_name} WiFi RSSI"
+    id: wifi_rssi
     update_interval: 60s
+    entity_category: diagnostic
 
   # Свободная память (heap)
   - platform: template
@@ -30,6 +32,23 @@ text_sensor:
   - platform: wifi_info
     ip_address:
       name: "${device_name} IP"
+
+  - platform: template
+    name: "WiFi качество"
+    icon: mdi:wifi
+    entity_category: diagnostic
+    lambda: |-
+      if (!id(wifi_rssi).has_state()) {
+        return {"Нет данных"};
+      }
+
+      float rssi = id(wifi_rssi).state;
+
+      if (rssi >= -50) return {"Отлично"};
+      if (rssi >= -60) return {"Хорошо"};
+      if (rssi >= -70) return {"Удовлетворительно"};
+      if (rssi >= -80) return {"Плохо"};
+      return {"Критично"};
 
 binary_sensor:
   # Статус подключения
