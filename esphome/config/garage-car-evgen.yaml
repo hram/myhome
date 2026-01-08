@@ -15,58 +15,64 @@ packages:
   diagnostics: !include common/diagnostics.yaml
 
 esp8266:
-  board: d1_mini  # Замени на свою модель, если не D1 Mini
+  board: d1_mini
 
-# Включаем I²C шину для VL53L0X
+# I²C для VL53L0X
 i2c:
   sda: GPIO4
   scl: GPIO5
   scan: true
 
-# Датчик расстояния VL53L0X
 sensor:
+  # ---------- VL53L0X ----------
   - platform: vl53l0x
     name: "Расстояние до автомобиля"
     id: car_distance_raw
-    # Режим: long_range (до 2 м), стандартный — 1.2 м
-    # long_range: true  # ← Включи, если расстояние до потолка > 1.2 м
-    update_interval: 5s  # Измеряем каждые 5 секунд
+    update_interval: 5s
     unit_of_measurement: "м"
     accuracy_decimals: 2
 
-# Бинарный сенсор: автомобиль на месте?
+  # ---------- DHT22 ----------
+  - platform: dht
+    model: DHT22
+    pin: D5        # GPIO14
+    temperature:
+      name: "Температура в гараже"
+      accuracy_decimals: 1
+    humidity:
+      name: "Влажность в гараже"
+      accuracy_decimals: 1
+    update_interval: 60s
+
 binary_sensor:
   - platform: template
     name: "Автомобиль в гараже"
     id: car_present
     device_class: occupancy
     filters:
-      - delayed_on: 2s       # Подтверждение: машина стоит > 2 сек
-      - delayed_off: 5s      # Уехать — подождать 5 сек
+      - delayed_on: 2s
+      - delayed_off: 5s
     lambda: |-
-      // Порог: если расстояние < 0.9 м — машина есть
-      const float threshold = 0.9; // ← Настрой под свою высоту!
+      const float threshold = 0.9;
       if (isnan(id(car_distance_raw).state)) {
         return false;
       }
-      return id(car_distance_raw).state < threshold;      
+      return id(car_distance_raw).state < threshold;
 
-# Включаем светодиод на GPIO2, когда автомобиль обнаружен
 interval:
-  - interval: 1s  # Проверяем каждую секунду
+  - interval: 1s
     then:
       - if:
           condition:
-            binary_sensor.is_on: car_present  # Если автомобиль в гараже
+            binary_sensor.is_on: car_present
           then:
             - output.turn_on: led_gpio2_out
           else:
             - output.turn_off: led_gpio2_out
 
-# Управляем GPIO2 напрямую как output
 output:
   - platform: gpio
     pin:
-      number: D4  # GPIO2 на D1 Mini (встроенный светодиод)
-      inverted: true  # Если светодиод включается при LOW (для встроенного D4 обычно НЕТ)
+      number: D4      # GPIO2 (встроенный LED)
+      inverted: true
     id: led_gpio2_out
