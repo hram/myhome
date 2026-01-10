@@ -2,3 +2,5 @@ esphome/config/secrets.yaml
 /.esphome/
 /.idea/
 /esphome/config/.platformio/
+/esphome/config/.cache/
+/esphome/config/.local/
