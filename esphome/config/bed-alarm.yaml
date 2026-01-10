@@ -1,0 +1,84 @@
+substitutions:
+  device_name: bed-alarm
+  friendly_name: "Аварийная сирена у кровати"
+  static_ip: 192.168.1.180
+  fw_version: "1.0.0"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+
+packages:
+  wifi: !include common/wifi_base.yaml
+  api: !include common/api.yaml
+  ota: !include common/ota.yaml
+  logger: !include common/logger.yaml
+  diagnostics: !include common/diagnostics.yaml
+  climate: !include common/climate_dht.yaml
+
+esp8266:
+  board: d1_mini
+
+# ===============================
+# ГЛОБАЛЬНЫЙ ФЛАГ ТРЕВОГИ
+# ===============================
+globals:
+  - id: alarm_active
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+# ===============================
+# ЗУММЕР
+# ===============================
+switch:
+  - platform: gpio
+    pin: D5
+    id: buzzer
+    name: "Bed Alarm Buzzer"
+    restore_mode: ALWAYS_OFF
+
+  - platform: template
+    name: "Bed Alarm"
+    id: bed_alarm
+    restore_mode: ALWAYS_OFF
+    turn_on_action:
+      - globals.set:
+          id: alarm_active
+          value: 'true'
+      - script.execute: alarm_loop
+    turn_off_action:
+      - globals.set:
+          id: alarm_active
+          value: 'false'
+      - switch.turn_off: buzzer
+
+# ===============================
+# КНОПКА "ЗАТКНИСЬ"
+# ===============================
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: D6
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Bed Alarm Stop Button"
+    on_press:
+      - switch.turn_off: bed_alarm
+
+# ===============================
+# ЛОГИКА СИРЕНЫ
+# ===============================
+script:
+  - id: alarm_loop
+    mode: restart
+    then:
+      - while:
+          condition:
+            lambda: |-
+              return id(alarm_active);
+          then:
+            - switch.turn_on: buzzer
+            - delay: 100ms
+            - switch.turn_off: buzzer
+            - delay: 1000ms

@@ -1,0 +1,15 @@
+substitutions:
+  dht_pin: D7
+  dht_update: 30s
+
+sensor:
+  - platform: dht
+    model: DHT11
+    pin: ${dht_pin}
+    temperature:
+      name: "температура"
+      accuracy_decimals: 1
+    humidity:
+      name: "влажность"
+      accuracy_decimals: 0
+    update_interval: ${dht_update}

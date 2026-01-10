@@ -1,31 +1,21 @@
+substitutions:
+  device_name: baxi-monitor
+  static_ip: 192.168.1.70
+  fw_version: "1.0.0"
+
 esphome:
-  name: baxi-monitor
-  friendly_name: baxi_monitor
+  name: ${device_name}
+  friendly_name: "Котёл отопления"
+
+packages:
+  wifi: !include common/wifi_base.yaml
+  api: !include common/api.yaml
+  ota: !include common/ota.yaml
+  logger: !include common/logger.yaml
+  diagnostics: !include common/diagnostics.yaml
 
 esp8266:
   board: d1_mini
-
-api:
-
-ota:
-  - platform: esphome
-    password: !secret ota_password
-
-logger:
-  level: DEBUG
-
-web_server:
-  port: 80
-
-wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
-  manual_ip:
-    static_ip: 192.168.1.70
-    gateway: 192.168.1.1
-    subnet: 255.255.255.0
-
-captive_portal:
 
 one_wire:
   - platform: gpio
@@ -49,7 +39,7 @@ sensor:
     name: "Напряжение ACS712"
     id: acs712_raw
 #    internal: true  # не показывать в HA
-    update_interval: 15s
+    update_interval: 10s
     filters:
       - multiply: 3.3
       - median: # Усреднение для стабильности
@@ -57,19 +47,29 @@ sensor:
           send_every: 1
 
   - platform: template
+    name: "Ток потребления котла"
+    id: boiler_current
+    unit_of_measurement: "A"
+    accuracy_decimals: 2
+    update_interval: 10s
+    lambda: |-
+      float voltage = id(acs712_raw).state;
+      // ⚠️ откалибруй!
+      float zero = 2.9205;    // напряжение без тока
+      float sensitivity = 0.1;     // 100 мВ / А (ACS712-20A)
+      float amps = abs(voltage - zero) / sensitivity;
+      // подавление шума
+      if (amps < 0.03) return 0.0;
+      return amps;
+
+  - platform: template
     name: "Потребление котла"
     unit_of_measurement: "Вт"
     accuracy_decimals: 0
-    update_interval: 15s
+    update_interval: 10s
     lambda: |-
-      float voltage = id(acs712_raw).state;
-      float zero = 0.884765625; // ← Обнови на стабильное значение без тока
-      float sensitivity = 0.1; // 100 мВ/А для ACS712-20A
-      float amps = abs(voltage - zero) / sensitivity;
-      float power = amps * 220;
-
-      // Если мощность < 5 Вт — считаем, что это шум
-      if (power < 5.0) {
-        return 0.0;
-      }
+      float amps = id(boiler_current).state;
+      float voltage = 220.0;
+      float power = amps * voltage;
+      if (power < 5.0) return 0.0;
       return power;
