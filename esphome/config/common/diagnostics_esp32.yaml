@@ -1,0 +1,56 @@
+# Диагностика устройства (не влияет на работу)
+
+sensor:
+  # Время работы устройства
+  - platform: uptime
+    name: "${device_name} Uptime"
+    update_interval: 60s
+
+  # Уровень сигнала Wi-Fi
+  - platform: wifi_signal
+    name: "${device_name} WiFi RSSI"
+    id: wifi_rssi
+    update_interval: 60s
+    entity_category: diagnostic
+
+  # Свободная память (heap)
+  - platform: template
+    name: "${device_name} Free Heap"
+    unit_of_measurement: "B"
+    accuracy_decimals: 0
+    update_interval: 60s
+    entity_category: diagnostic
+    lambda: |-
+      return esp_get_free_heap_size();
+
+text_sensor:
+  # Версия прошивки ESPHome
+  - platform: version
+    name: "${device_name} ESPHome Version"
+
+  # IP адрес (для проверки статики)
+  - platform: wifi_info
+    ip_address:
+      name: "${device_name} IP"
+
+  - platform: template
+    name: "WiFi качество"
+    icon: mdi:wifi
+    entity_category: diagnostic
+    lambda: |-
+      if (!id(wifi_rssi).has_state()) {
+        return {"Нет данных"};
+      }
+
+      float rssi = id(wifi_rssi).state;
+
+      if (rssi >= -50) return {"Отлично"};
+      if (rssi >= -60) return {"Хорошо"};
+      if (rssi >= -70) return {"Удовлетворительно"};
+      if (rssi >= -80) return {"Плохо"};
+      return {"Критично"};
+
+binary_sensor:
+  # Статус подключения
+  - platform: status
+    name: "${device_name} Status"

@@ -13,7 +13,7 @@ packages:
   api: !include common/api.yaml
   ota: !include common/ota.yaml
   logger: !include common/logger.yaml
-  diagnostics: !include common/diagnostics.yaml
+  diagnostics: !include common/diagnostics_esp8266.yaml
   climate: !include common/climate_dht.yaml
 
 esp8266:
