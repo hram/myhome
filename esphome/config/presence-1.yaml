@@ -1,0 +1,96 @@
+substitutions:
+  device_name: presence-1
+  friendly_name: "Датчик присутствия 1"
+  static_ip: 192.168.1.181
+  fw_version: "1.0.0"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+
+packages:
+  wifi: !include common/wifi_base.yaml
+  api: !include common/api.yaml
+  ota: !include common/ota.yaml
+  logger: !include common/logger.yaml
+  diagnostics: !include common/diagnostics_esp32.yaml
+#  climate: !include common/climate_dht.yaml
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+# ---------- UART для LD2410 ----------
+uart:
+  id: uart_ld2410
+  tx_pin: GPIO7
+  rx_pin: GPIO6
+  baud_rate: 256000
+
+# ---------- LD2410 Sensor ----------
+ld2410:
+  uart_id: uart_ld2410
+
+# ---------- Binary Sensors ----------
+binary_sensor:
+  - platform: gpio
+    name: "Presence"
+    id: presence
+    device_class: occupancy
+    pin:
+      number: GPIO4
+      mode: INPUT_PULLDOWN
+    filters:
+      - delayed_off: 3s
+
+  - platform: ld2410
+    has_target:
+      name: "UART Presence"
+      entity_category: diagnostic
+
+# ---------- Sensors ----------
+sensor:
+  - platform: ld2410
+    moving_distance:
+      name: "Moving Distance"
+      entity_category: diagnostic
+    still_distance:
+      name: "Still Distance"
+      entity_category: diagnostic
+
+# управляемый таймаут (опционально, но рекомендуется)
+number:
+  - platform: ld2410
+    timeout:
+      name: "LD2410 Timeout"
+      entity_category: config
+    max_move_distance_gate:
+      name: "Max move distance gate"
+      entity_category: config
+    max_still_distance_gate:
+      name: "Max still distance gate"
+      entity_category: config
+
+text_sensor:
+  - platform: ld2410
+    version:
+      name: "Bedroom 1 LD2410 Firmware"
+      entity_category: diagnostic
+
+# ---------- Switches ----------
+switch:
+  - platform: ld2410
+    engineering_mode:
+      name: Engineering mode
+    bluetooth:
+      name: Control bluetooth
+
+button:
+  - platform: ld2410
+    factory_reset:
+      name: Factory reset
+    restart:
+      name: Restart
+    query_params:
+      name: Query params
