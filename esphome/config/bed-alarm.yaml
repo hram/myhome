@@ -3,6 +3,7 @@ substitutions:
   friendly_name: "Аварийная сирена у кровати"
   static_ip: 192.168.1.180
   fw_version: "1.0.0"
+  dht_pin: D6
 
 esphome:
   name: ${device_name}
@@ -28,12 +29,17 @@ globals:
     restore_value: no
     initial_value: 'false'
 
+  - id: sound_enabled
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
 # ===============================
-# ЗУММЕР
+# ЗУМЕР (ТОЛЬКО ЧЕРЕЗ СКРИПТ)
 # ===============================
 switch:
   - platform: gpio
-    pin: D5
+    pin: D1
     id: buzzer
     name: "Bed Alarm Buzzer"
     restore_mode: ALWAYS_OFF
@@ -41,33 +47,49 @@ switch:
   - platform: template
     name: "Bed Alarm"
     id: bed_alarm
+    optimistic: true
     restore_mode: ALWAYS_OFF
     turn_on_action:
       - globals.set:
           id: alarm_active
           value: 'true'
+      - globals.set:
+          id: sound_enabled
+          value: 'true'
       - script.execute: alarm_loop
+      - light.turn_on:
+          id: alarm_led
+          effect: police
+          brightness: 70%
+
     turn_off_action:
       - globals.set:
           id: alarm_active
           value: 'false'
+      - globals.set:
+          id: sound_enabled
+          value: 'true'
       - switch.turn_off: buzzer
+      - light.turn_off: alarm_led
 
 # ===============================
-# КНОПКА "ЗАТКНИСЬ"
+# КНОПКА (ТОЛЬКО ГЛУШИТ ЗВУК)
 # ===============================
 binary_sensor:
   - platform: gpio
+    name: "Bed Alarm Stop Button"
     pin:
-      number: D6
+      number: D7
       mode: INPUT_PULLUP
       inverted: true
-    name: "Bed Alarm Stop Button"
     on_press:
-      - switch.turn_off: bed_alarm
+      - globals.set:
+          id: sound_enabled
+          value: 'false'
+      - switch.turn_off: buzzer
 
 # ===============================
-# ЛОГИКА СИРЕНЫ
+# ЛОГИКА СИРЕНЫ (КАК БЫЛО)
 # ===============================
 script:
   - id: alarm_loop
@@ -76,9 +98,49 @@ script:
       - while:
           condition:
             lambda: |-
-              return id(alarm_active);
+              return id(sound_enabled);
           then:
             - switch.turn_on: buzzer
             - delay: 100ms
             - switch.turn_off: buzzer
             - delay: 1000ms
+
+# ===============================
+# WS2812
+# ===============================
+light:
+  - platform: neopixelbus
+    type: GRB
+    variant: WS2812
+    pin: D5
+    num_leds: 1
+    id: alarm_led
+    restore_mode: ALWAYS_OFF
+    effects:
+      - addressable_lambda:
+          name: custom_pulse
+          update_interval: 100ms
+          lambda: |-
+            static int brightness = 0;
+            static int delta = 25;
+            
+            brightness += delta;
+            if (brightness >= 255 || brightness <= 0) {
+              delta = -delta;
+            }
+            
+            it[0] = Color(
+              brightness,  // R
+              0,
+              0
+            );
+      - addressable_lambda:
+          name: police
+          update_interval: 300ms
+          lambda: |-
+            static bool red = false;
+            auto color = red
+              ? Color(255, 0, 0)
+              : Color(0, 0, 255);
+            it[0] = color;
+            red = !red;

@@ -13,7 +13,7 @@ packages:
   api: !include common/api.yaml
   ota: !include common/ota.yaml
   logger: !include common/logger.yaml
-  diagnostics: !include common/diagnostics_esp32.yaml
+#  diagnostics: !include common/diagnostics_esp32.yaml
 
 esp32:
   board: m5stack-atom
@@ -58,7 +58,8 @@ media_player:
       speaker: echo_speaker
       format: WAV
     codec_support_enabled: false
-    buffer_size: 6000
+#    buffer_size: 6000 
+    buffer_size: 49152
     volume_min: 0.4
     files:
       - id: timer_finished_wave_file
