@@ -1,0 +1,200 @@
+substitutions:
+  device_name: garage-gate-open
+  static_ip: 192.168.1.183
+  fw_version: "1.0.0"
+
+esphome:
+  name: ${device_name}
+  friendly_name: "Ворота статус"
+
+packages:
+  wifi: !include common/wifi_base.yaml
+  api: !include common/api.yaml
+  ota: !include common/ota.yaml
+  logger: !include common/logger.yaml
+  diagnostics: !include common/diagnostics_esp8266.yaml
+  status_led: !include common/status_led_heartbeat.yaml
+
+esp8266:
+  board: d1_mini
+
+i2c:
+  sda: D2
+  scl: D1
+  scan: true
+
+globals:
+  - id: gate_prev_distance
+    type: float
+    restore_value: false
+    initial_value: '0.0'
+
+########################
+# НАСТРАИВАЕМЫЕ ПАРАМЕТРЫ
+########################
+
+number:
+  - platform: template
+    name: "Смещение"
+    id: gate_zero
+    min_value: 0
+    max_value: 3000
+    step: 1
+    unit_of_measurement: "mm"
+    restore_value: true
+    optimistic: true
+    initial_value: 300
+
+  - platform: template
+    name: "Порог срабатывания"
+    id: gate_open_threshold
+    min_value: 0
+    max_value: 3000
+    step: 1
+    unit_of_measurement: "mm"
+    restore_value: true
+    optimistic: true
+    initial_value: 200
+
+  - platform: template
+    name: "Чувствительность смещения"
+    id: gate_move_delta
+    min_value: 0
+    max_value: 3000
+    step: 1
+    unit_of_measurement: "mm"
+    restore_value: true
+    optimistic: true
+    initial_value: 5
+
+
+########################
+# СЕНСОР РАССТОЯНИЯ
+########################
+
+sensor:
+  - platform: vl53l0x
+    name: "Расстояние (сырое)"
+    id: gate_distance_raw
+    update_interval: 500ms
+    unit_of_measurement: "mm"
+    accuracy_decimals: 0
+    filters:
+      - multiply: 1000
+      - sliding_window_moving_average:
+          window_size: 7
+          send_every: 1
+
+  # Расстояние с учетом виртуального нуля
+  - platform: template
+    name: "Расстояние"
+    id: gate_distance_zeroed
+    unit_of_measurement: "mm"
+    accuracy_decimals: 0
+    update_interval: 500ms
+    lambda: |-
+      if (!id(gate_distance_raw).has_state()) {
+        return NAN;
+      }
+      return id(gate_distance_raw).state - id(gate_zero).state;
+
+########################
+# БИНАРНЫЙ СЕНСОР ВОРОТ
+########################
+
+binary_sensor:
+  - platform: template
+    name: "Статус"
+    id: gate_open
+    device_class: garage_door
+    lambda: |-
+      // 1. если датчик не видит объект → ворота открыты
+      if (!id(gate_distance_zeroed).has_state()) {
+        return true;
+      }
+
+      float d = id(gate_distance_zeroed).state;
+
+      // 2. защита от отрицательных значений
+      if (d < 0) {
+        d = 0;
+      }
+
+      // 3. если больше настраиваемого порога → открыты
+      if (d > id(gate_open_threshold).state) {
+        return true;
+      }
+
+      // 4. иначе закрыты
+      return false;
+    
+  - platform: template
+    name: "Opening"
+    id: gate_opening
+    lambda: |-
+      if (!id(gate_distance_zeroed).has_state()) {
+        return false;
+      }
+
+      float current = id(gate_distance_zeroed).state;
+      float prev = id(gate_prev_distance);
+
+      if ((current - prev) > id(gate_move_delta).state) {
+        return true;
+      }
+
+      return false;
+
+  - platform: template
+    name: "Closeing"
+    id: gate_closing
+    lambda: |-
+      if (!id(gate_distance_zeroed).has_state()) {
+        return false;
+      }
+
+      float current = id(gate_distance_zeroed).state;
+      float prev = id(gate_prev_distance);
+
+      if ((prev - current) > id(gate_move_delta).state) {
+        return true;
+      }
+
+      return false;
+
+  - platform: template
+    name: "Moving"
+    id: gate_moving
+    device_class: moving
+    lambda: |-
+      if (!id(gate_distance_zeroed).has_state()) {
+        return false;
+      }
+
+      float diff = fabs(id(gate_distance_zeroed).state - id(gate_prev_distance));
+
+      if (diff > id(gate_move_delta).state) {
+        return true;
+      }
+
+      return false;
+
+interval:
+  - interval: 500ms
+    then:
+      - lambda: |-
+          if (id(gate_distance_zeroed).has_state()) {
+            id(gate_prev_distance) = id(gate_distance_zeroed).state;
+          }
+          
+cover:
+  - platform: template
+    name: "Ворота"
+    id: garage_gate_cover
+    optimistic: true  # т.к. мы сами вычисляем состояние, управления нет
+    lambda: |-
+      if (id(gate_open).state) {
+        return cover::COVER_OPEN;
+      } else {
+        return cover::COVER_CLOSED;
+      }

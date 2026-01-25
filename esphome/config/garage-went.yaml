@@ -1,0 +1,82 @@
+substitutions:
+  device_name: garage-went
+  static_ip: 192.168.1.182
+  fw_version: "1.0.0"
+
+esphome:
+  name: ${device_name}
+  friendly_name: "Вентиляция в гараже"
+  on_boot:
+    priority: -100
+    then:
+      # Сразу гасим реле при старте
+      - switch.turn_off: relay
+
+packages:
+  wifi: !include common/wifi_base.yaml
+  api: !include common/api.yaml
+  ota: !include common/ota.yaml
+  logger: !include common/logger.yaml
+  diagnostics: !include common/diagnostics_esp8266.yaml
+
+esp8266:
+  board: esp01_1m
+
+logger:
+  baud_rate: 0   # ВАЖНО! иначе конфликт с UART
+  level: NONE
+
+number:
+  - platform: template
+    id: relay_timeout
+    name: "Relay timeout"
+    min_value: 1
+    max_value: 600
+    step: 1
+    unit_of_measurement: s
+    optimistic: true
+    restore_value: true
+    initial_value: 60
+
+switch:
+  - platform: gpio
+    id: relay
+    name: "Relay"
+    restore_mode: ALWAYS_OFF
+    pin:
+      number: GPIO0
+      inverted: true
+      mode: OUTPUT
+    on_turn_on:
+      - delay: !lambda "return (uint32_t)(id(relay_timeout).state * 1000);"
+      - switch.turn_off: relay
+  - platform: restart
+    name: Restart
+
+# Blink LED for status, and also expose to HA as switch
+light:
+  - platform: status_led
+    name: "Status light"
+    id: blueled
+    pin:
+      number: GPIO2
+      inverted: yes
+    restore_mode: RESTORE_DEFAULT_OFF
+
+script:
+  - id: heartbeat
+    mode: single
+    then:
+      - light.toggle: blueled
+      - delay: 20 ms
+      - light.toggle: blueled
+
+# Heartbeat while connected to HA
+interval:
+  - interval: 5s
+    then:
+      if:
+        condition:
+          api.connected:
+        then:
+          - script.execute: heartbeat

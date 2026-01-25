@@ -1,0 +1,31 @@
+substitutions:
+  status_led_pin: GPIO2
+  status_led_inverted: "true"
+  status_led_name: "Status LED"
+  heartbeat_interval: 5s
+
+light:
+  - platform: status_led
+    name: "${status_led_name}"
+    id: status_led_light
+    pin:
+      number: ${status_led_pin}
+      inverted: ${status_led_inverted}
+    restore_mode: RESTORE_DEFAULT_OFF
+
+script:
+  - id: status_led_heartbeat
+    mode: single
+    then:
+      - light.toggle: status_led_light
+      - delay: 20 ms
+      - light.toggle: status_led_light
+
+interval:
+  - interval: ${heartbeat_interval}
+    then:
+      if:
+        condition:
+          api.connected:
+        then:
+          - script.execute: status_led_heartbeat

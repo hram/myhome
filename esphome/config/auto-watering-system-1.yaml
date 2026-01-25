@@ -41,6 +41,8 @@ sensor:
   - platform: template
     name: "Влажность почвы (%)"
     id: soil_moisture_percent
+    device_class: moisture
+    state_class: measurement
     unit_of_measurement: "%"
     accuracy_decimals: 0
     update_interval: 60s
