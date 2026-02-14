@@ -1,0 +1,17 @@
+# ESPHome project
+config/.esphome/
+config/secrets.yaml
+
+# Docker
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
